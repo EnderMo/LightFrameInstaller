@@ -13,6 +13,9 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
+    <Filter Include="头文件\VertexUI">
+      <UniqueIdentifier>{ec9a8af5-c9ed-41c7-a411-a5fad040398b}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="framework.h">
@@ -32,6 +35,21 @@
     </ClInclude>
     <ClInclude Include="AA.h">
       <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="VertexUI\framework.h">
+      <Filter>头文件\VertexUI</Filter>
+    </ClInclude>
+    <ClInclude Include="VertexUI\VertexUI.ClickArea.h">
+      <Filter>头文件\VertexUI</Filter>
+    </ClInclude>
+    <ClInclude Include="VertexUI\VertexUI.Colors.h">
+      <Filter>头文件\VertexUI</Filter>
+    </ClInclude>
+    <ClInclude Include="VertexUI\VertexUI.min.h">
+      <Filter>头文件\VertexUI</Filter>
+    </ClInclude>
+    <ClInclude Include="VertexUI\VertexUI.Panel.h">
+      <Filter>头文件\VertexUI</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

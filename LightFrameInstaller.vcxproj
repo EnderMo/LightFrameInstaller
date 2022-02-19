@@ -145,6 +145,11 @@
     <ClInclude Include="LightFrameInstaller.h" />
     <ClInclude Include="Resource.h" />
     <ClInclude Include="targetver.h" />
+    <ClInclude Include="VertexUI\framework.h" />
+    <ClInclude Include="VertexUI\VertexUI.ClickArea.h" />
+    <ClInclude Include="VertexUI\VertexUI.Colors.h" />
+    <ClInclude Include="VertexUI\VertexUI.min.h" />
+    <ClInclude Include="VertexUI\VertexUI.Panel.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="LightFrameInstaller.cpp" />

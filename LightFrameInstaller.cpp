@@ -14,26 +14,34 @@
 #pragma warning(disable:4996)
 #pragma comment(lib,"winmm.lib") 
 
-#define MAX_LOADSTRING 100
+#define MAX_LOADSTRING			100
+#define FileMapping_NAME		"LightFrameInstCheck"
+#define WATCHDOG_TIMEOUT		1000*10
+#define USER_CANCEL				if(UserCancel){\
+									isUpdateFailed=true;\
+									strcpy(CurrentTask,"用户取消");\
+									SwitchPanel(L"Panel2");\
+									return 1;\
+								}
 
 // 全局变量:
 HINSTANCE hInst;								// 当前实例
 WCHAR szTitle[MAX_LOADSTRING];				  // 标题栏文本
 WCHAR szWindowClass[MAX_LOADSTRING];			// 主窗口类名
 
-#define FileMapping_NAME "LightFrameInstCheck"
 LPVOID lpdata = NULL;
-LPWSTR lpVersion;
+LPCWSTR lpVersion, lpFileName;
 char Version[32], NewVer[32];
 char CurrentTask[32];
-int TaskProgress = 0;//d/5
-bool isUpdateFailed = false;
-bool WaitForThread;
-HANDLE hDlThread;
-LPCWSTR MirrorURL = L"https://res.iyoroy.top/lightframe/release/";
+int TaskProgress = 0;
+bool isUpdateFailed = false, isUpdateSuccess = false;
+bool isNewInstall = false;
+bool UserCancel = false;
+HANDLE hUpdateThread, hWatchDog;
+LPCWSTR MirrorURL = L"https://res.iyoroy.top/lightframe/release";
 
 enum USER_MESSAGES {
-	UM_UPDATE_PANNEL = 0x0401
+	
 };
 
 using namespace std;
@@ -53,7 +61,16 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 	UNREFERENCED_PARAMETER(lpCmdLine);
 
 	// TODO: 在此处放置代码。
-	lpVersion = lpCmdLine;
+	isNewInstall = (__argc == 1);
+	lpFileName = L"LightFrame.exe";
+	wchar_t* qwq[20];
+	for (int i = 1; i < __argc; i++) {
+		if (wcsstr(__wargv[i], L"--CurrentVer")) 
+			lpVersion = __wargv[++i];
+		if (wcsstr(__wargv[i], L"--FileName")) 
+			lpFileName = __wargv[++i];
+	}
+
 	// 初始化全局字符串
 	LoadStringW(hInstance, IDS_APP_TITLE, szTitle, MAX_LOADSTRING);
 	LoadStringW(hInstance, IDC_LIGHTFRAMEINSTALLER, szWindowClass, MAX_LOADSTRING);
@@ -169,92 +186,34 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 //  WM_DESTROY  - 发送退出消息并返回
 //
 //
-int GetMemoryVer()
-{
-	//打开一个指定的文件映射对象，获得共享内存对象的句柄
-	HANDLE hmapfile = OpenFileMappingA(FILE_MAP_READ, FALSE, FileMapping_NAME);
-	if (hmapfile == NULL) {
-		sprintf_s(Version, "%s", "ERR - 主程序传入失败");
-	}
-	else
-	{
-		LPVOID lpbase = MapViewOfFile(hmapfile, FILE_MAP_READ, 0, 0, 0);
-		if (lpbase == NULL)
-		{
-			MessageBox(0, L"memory Error", L"Fatal", 0);
-		}
-		else
-		{
-			sprintf_s(Version, "%s", lpbase);
-		}
-		UnmapViewOfFile(lpbase);
-		CloseHandle(hmapfile);
 
-	}
-	return 0;
-}
+
+//int GetMemoryVer() //旧版主程序通信
+//{
+//	//打开一个指定的文件映射对象，获得共享内存对象的句柄
+//	HANDLE hmapfile = OpenFileMappingA(FILE_MAP_READ, FALSE, FileMapping_NAME);
+//	if (hmapfile == NULL) {
+//		sprintf_s(Version, "%s", "ERR - 主程序传入失败");
+//	}
+//	else
+//	{
+//		LPVOID lpbase = MapViewOfFile(hmapfile, FILE_MAP_READ, 0, 0, 0);
+//		if (lpbase == NULL)
+//		{
+//			MessageBox(0, L"memory Error", L"Fatal", 0);
+//		}
+//		else
+//		{
+//			sprintf_s(Version, "%s", lpbase);
+//		}
+//		UnmapViewOfFile(lpbase);
+//		CloseHandle(hmapfile);
+//
+//	}
+//	return 0;
+//}
 
 VertexUIInit;
-
-DWORD WINAPI UpdateThread(LPVOID lpParam) {
-	//FindWindow:LIGHTFRAME 标题是LightFrame
-	isUpdateFailed = false;
-	WaitForThread = false;
-//	SendMessage()
-	strcpy(CurrentTask, "下载更新文件...");
-	TaskProgress = 1;
-
-	TCHAR bufferURL[128];
-	HRESULT hrDl;
-	_stprintf_s(bufferURL, L"%sLightFrame.exe?skq=%d", MirrorURL, (int)GetTickCount64());
-	hrDl = URLDownloadToFile(NULL, bufferURL, L"LightFrame.ex_", 0, NULL);
-	if (hrDl != S_OK) {
-		strcpy(CurrentTask, "错误：网络问题，无法下载");
-		isUpdateFailed = true;
-		SwitchPanel(L"Panel2");
-		return -1;
-	}
-
-	strcpy(CurrentTask, "发送退出信息...");
-	TaskProgress = 2;
-	SwitchPanel(L"Panel2");
-	HWND hWndLF = FindWindow(L"LIGHTFRAME", L"LightFrame");
-	PROCESSENTRY32  pe32;
-	HANDLE hSnaphot;
-	HANDLE hApp;
-	DWORD dProcess = 0;
-	hSnaphot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0); //获取进程快照
-	Process32First(hSnaphot, &pe32); //指向第一个进程
-	do {
-		if (lstrcmpi(pe32.szExeFile, _T("LightFrame.exe")) == 0) {
-			dProcess = pe32.th32ProcessID;
-			break;
-		}
-	} while (Process32Next(hSnaphot, &pe32)); // 不断循环直到取不到进程
-	hApp = OpenProcess(
-		PROCESS_VM_OPERATION | SYNCHRONIZE, FALSE, dProcess);
-	::PostMessage(hWndLF, 0xff3, 0, 1);
-
-	strcpy(CurrentTask, "等待LightFrame主程序退出...");
-	TaskProgress = 3;
-	SwitchPanel(L"Panel2");
-	WaitForSingleObject(hApp, INFINITE);
-
-	strcpy(CurrentTask, "覆盖更新...");
-	TaskProgress = 4;
-	SwitchPanel(L"Panel2");
-	DeleteFile(L"LightFrame.exe");
-	MoveFile(L"LightFrame.ex_", L"LightFrame.exe");
-
-	strcpy(CurrentTask, "启动LightFrame...");
-	TaskProgress = 5;
-	SwitchPanel(L"Panel2");
-	WinExec("LightFrame.exe", SW_SHOW);
-
-
-
-	return 0;
-}
 
 RUNFUN GoPage2()
 {
@@ -272,7 +231,107 @@ RUNFUN MoveWin()
 	SendMessage(h, WM_NCLBUTTONDOWN, HTCAPTION, 0);
 	return -1;
 }
+void DoClean() {
+	DeleteFile(L"newVer");
+#ifdef _DEBUG
+	HWND hWndLF = FindWindow(L"LIGHTFRAME", L"LightFrame");
+	::PostMessage(hWndLF, 0xff3, 0, 1);
+	DeleteFile(lpFileName);
+#endif
+}
+DWORD WINAPI WatchDog(LPVOID lpParam) {//防止UpdateThread卡死
+	int TaskHistory;
+	do {
+		if (isUpdateFailed || isUpdateSuccess)return 0;
+		TaskHistory = TaskProgress;
+		Sleep(WATCHDOG_TIMEOUT);
+	} while (TaskHistory != TaskProgress);
+	isUpdateFailed = true;
+	TerminateThread(hUpdateThread, -1);
+	strcpy(CurrentTask, (UserCancel ? "用户取消" : "升级失败：WATCHDOG TIMEOUT"));
+	GoPage2();
+	return -1;
+}
+DWORD WINAPI UpdateThread(LPVOID lpParam) {
+	isUpdateFailed = false;
+	isUpdateSuccess = false;
+	UserCancel = false;
+	strcpy(CurrentTask, (isNewInstall ? "下载程序本体..." : "下载更新文件..."));
+	TaskProgress = 1;
+	TCHAR bufferURL[128];
+	HRESULT hrDl;
+	_stprintf(bufferURL, L"%s/LightFrame.exe?skq=%d", MirrorURL, (int)GetTickCount64());
+	hrDl = URLDownloadToFile(NULL, bufferURL, (isNewInstall ? L"LightFrame.exe" : L"LightFrame.ex_"), 0, NULL);
+	if (hrDl != S_OK) {
+		strcpy(CurrentTask, "错误：网络问题，无法下载");
+		isUpdateFailed = true;
+		GoPage2();
+		return -1;
+	}
+	USER_CANCEL;
+
+	if (!isNewInstall) {
+		strcpy(CurrentTask, "发送退出信息...");
+		TaskProgress = 2;
+		GoPage2();
+		HWND hWndLF = FindWindow(L"LIGHTFRAME", L"LightFrame");
+		PROCESSENTRY32  pe32;
+		HANDLE hSnaphot;
+		HANDLE hApp;
+		DWORD dProcess = 0;
+		hSnaphot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0); //获取进程快照
+		Process32First(hSnaphot, &pe32); //指向第一个进程
+		do {
+			if (lstrcmpi(pe32.szExeFile, lpFileName) == 0) {
+				dProcess = pe32.th32ProcessID;
+				break;
+			}
+		} while (Process32Next(hSnaphot, &pe32)); // 不断循环直到取不到进程
+		hApp = OpenProcess(
+			PROCESS_VM_OPERATION | SYNCHRONIZE, FALSE, dProcess);
+		::PostMessage(hWndLF, 0xff3, 0, 1);
+		Sleep(500);
+		USER_CANCEL;
+
+		strcpy(CurrentTask, "等待LightFrame主程序退出...");
+		TaskProgress = 3;
+		GoPage2();
+		WaitForSingleObject(hApp, INFINITE);
+		Sleep(500);
+		USER_CANCEL;
+
+		strcpy(CurrentTask, "覆盖更新...");
+		TaskProgress = 4;
+		GoPage2();
+		DeleteFile(lpFileName);
+		MoveFile(L"LightFrame.ex_", lpFileName);
+		Sleep(500);
+		USER_CANCEL;
+	}
+
+	strcpy(CurrentTask, "删除缓存文件...");
+	TaskProgress = (isNewInstall ? 2 : 5);
+	GoPage2();
+	DoClean();
+	Sleep(500);
+	USER_CANCEL;
+
+	strcpy(CurrentTask, "启动LightFrame...");
+	TaskProgress = (isNewInstall ? 3 : 6);
+	GoPage2();
+	ShellExecute(NULL, L"open", lpFileName, NULL, NULL, SW_SHOWNORMAL);
+	Sleep(500);
+
+	strcpy(CurrentTask, "完成！"); 
+	TaskProgress = (isNewInstall ? 3 : 6);
+	isUpdateSuccess = true; 
+	GoPage2();
+
+	return 0;
+}
 int hState = 0;
+const wchar_t* BtnStr = L"下载新版本";
+int newver, cver;
 int LightFrameAreaEvent(HWND hWnd, LPARAM lParam)
 {
 
@@ -292,10 +351,16 @@ int LightFrameAreaEvent(HWND hWnd, LPARAM lParam)
 			if (ClickMsg == 1)
 			{
 				ClickMsg = 0;
-				GoPage2();
-				WaitForThread = true;
-				CreateThread(NULL, 0, UpdateThread, NULL, 0, 0);
-				while (WaitForThread)Sleep(200);
+				if (cver <= newver)
+				{
+					GoPage2();
+					hUpdateThread = CreateThread(NULL, 0, UpdateThread, NULL, 0, 0);
+					hWatchDog = CreateThread(NULL, 0, WatchDog, NULL, 0, 0);
+				}
+				else
+				{
+					exit(0);
+				}
 			}
 			if (hState == 0)
 			{
@@ -308,6 +373,7 @@ int LightFrameAreaEvent(HWND hWnd, LPARAM lParam)
 			if (ClickMsg == 1)
 			{
 				ClickMsg = 0;
+				DoClean();
 				DestroyWindow(hWnd);
 				PostQuitMessage(0);
 			}
@@ -330,12 +396,20 @@ int LightFrameAreaEvent(HWND hWnd, LPARAM lParam)
 	if (PanelID == L"Panel2")
 	{
 		RECT rc = {};
-		if ((GetAreaPtInfo(hWnd, winrc.right - 170, winrc.bottom - 80, 150, 40, rc, lParam)) == 1)
+		if (GetAreaPtInfo(hWnd, winrc.right - 170, winrc.bottom - 80, 150, 40, rc, lParam) == 1)
 		{
 			if (ClickMsg == 1)
 			{
-				ClickMsg = 0;
-				PostQuitMessage(0);
+				if (isUpdateFailed || isUpdateSuccess) {
+					ClickMsg = 0;
+					PostQuitMessage(0);
+				}
+				else {
+					ClickMsg = 0;
+					UserCancel = true;
+					strcpy(CurrentTask, "等待线程退出...");
+					SwitchPanel(L"Panel2");
+				}
 			}
 			if (hState == 0)
 			{
@@ -387,7 +461,7 @@ void TextPreDrawA(HDC hdc, int x, int y, int sizex, int sizey, const char* txt, 
 		hFont = CreateFontIndirect(&lf);  // create the font
 	}
 	HFONT old = (HFONT)SelectObject(hdc, hFont);
-	DrawTextA(hdc, txt, strlen(txt), &rc, DT_SINGLELINE |  DT_VCENTER);
+	DrawTextA(hdc, txt, strlen(txt), &rc, DT_SINGLELINE | DT_VCENTER);
 	DeleteObject(hFont);
 	SelectObject(hdc, old);
 }
@@ -397,20 +471,36 @@ void MainWindow(HWND h, HDC hdc, int scale)
 	RECT rc;
 	GetClientRect(h, &rc);
 	CreateRect(h, hdc, rc.left, rc.top, (rc.right - rc.left) * scale, (rc.bottom - rc.top) * scale, RGB(42, 47, 56));
-	CreateRoundButtonEx(hdc, ((rc.right - rc.left) / 2 - 60)*scale, (rc.bottom - 80)*scale, 120*scale, 40*scale, 40*scale, L"下载新版本",18*scale, VERTEXUICOLOR_GREENSEA);
-	
+	CreateRoundButtonEx(hdc, ((rc.right - rc.left) / 2 - 60) * scale, (rc.bottom - 80) * scale, 120 * scale, 40 * scale, 40 * scale, BtnStr, 18 * scale, VERTEXUICOLOR_GREENSEA);
+
 }
 
 void Panel1(HWND hWnd, HDC hdc)
 {
+
 	int scale = 1;
 	RECT rc;
 	GetClientRect(hWnd, &rc);
-	CreateAA(hWnd, hdc, rc.left, rc.top, rc.right - rc.left + 6, rc.bottom - rc.top+6, MainWindow);
-	TextPreDrawEx(hdc, 40, 60, 220, 24, L"当前版本(Total Build) :", 20, 0,VERTEXUICOLOR_WHITE);
-	TextPreDrawA(hdc, 240, 60, 200, 24, Version, VERTEXUICOLOR_WHITE);
-	TextPreDrawEx(hdc, 40, 120, 220, 24, L"最新版本(Total Build) :", 20, 0, VERTEXUICOLOR_WHITE);
-	TextPreDrawA(hdc, 240, 120, 200, 24, NewVer, VERTEXUICOLOR_WHITE);
+
+	newver = atoi(NewVer);
+	cver = atoi(Version);
+	if (cver <= newver)
+	{
+		CreateAA(hWnd, hdc, rc.left, rc.top, rc.right - rc.left + 6, rc.bottom - rc.top + 6, MainWindow);
+		if (!isNewInstall) {
+			TextPreDrawEx(hdc, 40, 60, 220, 24, L"当前版本(Total Build) :", 20, 0, VERTEXUICOLOR_WHITE);
+			TextPreDrawA(hdc, 240, 60, 200, 24, Version, VERTEXUICOLOR_WHITE);
+		}
+		TextPreDrawEx(hdc, 40, 120, 220, 24, L"最新版本(Total Build) :", 20, 0, VERTEXUICOLOR_WHITE);
+		TextPreDrawA(hdc, 240, 120, 200, 24, NewVer, VERTEXUICOLOR_WHITE);
+
+	}
+	else{
+		BtnStr = L"关闭";
+		CreateAA(hWnd, hdc, rc.left, rc.top, rc.right - rc.left + 6, rc.bottom - rc.top + 6, MainWindow);
+		TextPreDrawEx(hdc, 0,0, rc.right-rc.left, rc.bottom-rc.top, L"当前已经是最新版本或更新的版本.", 20, 1, VERTEXUICOLOR_WHITE);
+	}
+	TextPreDrawA(hdc, 10, 170, 200, 190, "Installer:v0.1.1.10-β", RGB(100, 100, 100));
 	CreateRect(hWnd, hdc, 0, 0, rc.right, 40, VERTEXUICOLOR_GREENDEEPSEA);
 	PanelDrawCloseBtn(hWnd, hdc, rc.right - 40, 0, 40, 40, 12, RGB(244, 244, 244));
 	PanelDrawOutFrame(hWnd, hdc, VERTEXUICOLOR_DARKENX);
@@ -423,11 +513,10 @@ void Panel2(HWND hWnd, HDC hdc)
 	TextPreDrawEx(hdc, 40, 60, 220, 24, L"当前任务:", 20, 0, VERTEXUICOLOR_WHITE);
 	TextPreDrawA(hdc, 180, 60, 300, 24, CurrentTask, VERTEXUICOLOR_WHITE);
 	char TargetProg[4];
-	sprintf_s(TargetProg, "%d/5", TaskProgress);
+	sprintf_s(TargetProg, (isNewInstall ? "%d/3" : "%d/6"), TaskProgress);
 	TextPreDrawEx(hdc, 40, 120, 220, 24, L"进度:", 20, 0, VERTEXUICOLOR_WHITE);
 	TextPreDrawA(hdc, 180, 120, 300, 24, TargetProg, VERTEXUICOLOR_WHITE);
-	if (isUpdateFailed)DrawIcon(hdc, rc.right - 200, rc.bottom - 80, LoadIcon(NULL, IDI_ERROR));
-	CreateSimpleButton(hWnd, hdc, rc.right - 170, rc.bottom - 80, 150, 40, L"完成更新");
+	CreateSimpleButton(hWnd, hdc, rc.right - 170, rc.bottom - 80, 150, 40, (isUpdateFailed || isUpdateSuccess ? L"完成" : L"取消"));
 }
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
@@ -441,13 +530,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 	{
 		GhWnd = hWnd;
 		//GetMemoryVer();
-
 		TCHAR bufferURL[64];
-		_stprintf_s(bufferURL, L"%s/buildver", MirrorURL);
-
+		_stprintf(bufferURL, L"%s/buildver?skq=%d", MirrorURL, (int)GetTickCount64());
 		HRESULT ret = URLDownloadToFile(NULL, bufferURL, L"newVer", 0, NULL);
 		if (ret != S_OK) {
-			MessageBox(NULL, L"Fatal Error:无法获取版本更新信息！", L"Error", MB_OK);
+			MessageBox(NULL, L"Fatal Error:无法获取版本更新信息！", L"LightFrameInstaller", MB_OK | MB_ICONERROR);
 			PostQuitMessage(0);
 		}
 
@@ -564,8 +651,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 	}
 	return 0;
 }
-
-// “关于”框的消息处理程序。
+// “关于”框的消息处理程序。 
 INT_PTR CALLBACK About(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
 {
 	UNREFERENCED_PARAMETER(lParam);
